@@ -1,0 +1,62 @@
+'Profit Sales Report - Live Updating
+'Written By Tommy Garrison
+'Last Updated 05/01/2016
+
+Private Sub Workbook_Open()
+  Dim rng As Range
+  Dim ws, ws2 As Worksheet
+  Dim CustomerListBox, LocationListBox, ComparisonListBox As MSForms.ComboBox
+  Dim vArray As Variant
+    
+  Set ws = Worksheets("Main")
+  Set ws2 = Worksheets("LookupLists")
+  Set CustomerListBox = ws.CustomerListBox
+  Set LocationListBox = ws.LocationListBox
+  Set ComparisonListBox = ws.ComparisonListBox
+  
+  Dim last_row As Long
+  
+  last_row = (ws2.Cells(ws2.Rows.Count, "A").End(xlUp).Row) + 4
+  ws2.Rows("2:" & last_row).EntireRow.Delete
+  
+  'SQL Variable Declaration
+  Dim SQL_String, conn_String As String
+  Dim cn As ADODB.Connection
+  
+  Set cn = New ADODB.Connection
+  
+  conn_String = "Provider=SQLOLEDB.1;Integrated Security=SSPI;Persist Security Info=True;Initial Catalog=Prophet21;Data Source=P21SQL;Use Procedure for Prepare=1;Auto Translate=True;Packet Size=4096;Workstation ID=AMS-5069;Use Encryption for Data=False;Tag with column collation when possible=False"
+    
+  SQL_String = "SELECT DISTINCT customer.customer_id, address.name FROM Prophet21.dbo.p21_view_customer customer INNER JOIN Prophet21.dbo.p21_view_address AS address ON address.id = customer.customer_id WHERE customer.delete_flag = 'N'"
+  
+  'Begin SQL Query (Product Group List)
+  cn.Open conn_String
+  
+  Dim rs As ADODB.Recordset
+  Set rs = New ADODB.Recordset
+  
+  With rs
+    .ActiveConnection = cn
+    .Open SQL_String
+    Worksheets("LookupLists").Range("A3").CopyFromRecordset rs
+    .Close
+  End With
+  
+  cn.Close
+  Set cn = Nothing
+  Set rs = Nothing
+  
+  Worksheets("LookupLists").Range("A2:C2") = "ALL"
+  
+  last_row = ws2.Cells(ws2.Rows.Count, "A").End(xlUp).Row
+  ws2.Range("C3:C" & last_row).Formula = "=CONCATENATE(A3, "" | "", B3)"
+  ws2.Columns.AutoFit
+  
+  vArray = ws2.Range("C2:C" & last_row).Value
+  CustomerListBox.List = vArray
+  LocationListBox.List = Array("ALL", "100", "200", "300", "400", "500")
+  ComparisonListBox.List = Array("<", ">", "=")
+  
+End Sub
+
+
