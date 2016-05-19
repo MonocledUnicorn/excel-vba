@@ -1,3 +1,7 @@
+'Written by Tommy Garrison
+'AKA MonocledUnicorn
+'Created on 08/14/2015
+
 Sub Extract()
   'Disable Application Updating
   Application.ScreenUpdating = False
