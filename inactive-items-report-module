@@ -1,0 +1,684 @@
+Sub Extract()
+  'Disable Application Updating
+  Application.ScreenUpdating = False
+  
+  'Clear all records from worksheets
+  Worksheets("Main").Range("B7: B32").ClearContents
+  Worksheets("UnfilteredData").Rows("2:" & Worksheets("UnfilteredData").Rows.Count).Delete
+  Worksheets("100").Rows("2:" & Worksheets("100").Rows.Count).Delete
+  Worksheets("Broach").Rows("2:" & Worksheets("Broach").Rows.Count).Delete
+  Worksheets("Stewart").Rows("2:" & Worksheets("Stewart").Rows.Count).Delete
+  Worksheets("Dobbs").Rows("2:" & Worksheets("Dobbs").Rows.Count).Delete
+  Worksheets("Menard").Rows("2:" & Worksheets("Menard").Rows.Count).Delete
+  Worksheets("200").Rows("2:" & Worksheets("200").Rows.Count).Delete
+  Worksheets("LittleRockHouse").Rows("2:" & Worksheets("LittleRockHouse").Rows.Count).Delete
+  Worksheets("Workman").Rows("2:" & Worksheets("Workman").Rows.Count).Delete
+  Worksheets("Parcher").Rows("2:" & Worksheets("Parcher").Rows.Count).Delete
+  Worksheets("Fortner").Rows("2:" & Worksheets("Fortner").Rows.Count).Delete
+  Worksheets("Brown").Rows("2:" & Worksheets("Brown").Rows.Count).Delete
+  Worksheets("Howser").Rows("2:" & Worksheets("Howser").Rows.Count).Delete
+  Worksheets("Connor").Rows("2:" & Worksheets("Connor").Rows.Count).Delete
+  Worksheets("Hanson").Rows("2:" & Worksheets("Hanson").Rows.Count).Delete
+  Worksheets("Vailes").Rows("2:" & Worksheets("Vailes").Rows.Count).Delete
+  Worksheets("300").Rows("2:" & Worksheets("300").Rows.Count).Delete
+  Worksheets("Sprague").Rows("2:" & Worksheets("Sprague").Rows.Count).Delete
+  Worksheets("Word-Allwhite").Rows("2:" & Worksheets("Word-Allwhite").Rows.Count).Delete
+  Worksheets("Richmond").Rows("2:" & Worksheets("Richmond").Rows.Count).Delete
+  Worksheets("400").Rows("2:" & Worksheets("400").Rows.Count).Delete
+  Worksheets("Nash").Rows("2:" & Worksheets("Nash").Rows.Count).Delete
+  Worksheets("Carney").Rows("2:" & Worksheets("Carney").Rows.Count).Delete
+  Worksheets("500").Rows("2:" & Worksheets("500").Rows.Count).Delete
+  Worksheets("Fyffe").Rows("2:" & Worksheets("Fyffe").Rows.Count).Delete
+  Worksheets("Domtar").Rows("2:" & Worksheets("Domtar").Rows.Count).Delete
+
+  'Variable Declaration/Initialization
+  Dim Unfiltered_Data As Worksheet, i As Long, Begin_Date As Date
+  Set Unfiltered_Data = Worksheets("UnfilteredData")
+  Begin_Date = CDate(Worksheets("Main").Cells(2, 2).Value)
+  
+   'Set Up SQL Connection
+  Dim cn As ADODB.Connection
+  Set cn = New ADODB.Connection
+  
+  Dim ConnString As String
+  Dim SQL_Query_String As String
+  
+  ConnString = "DRIVER=SQL Server;SERVER=P21SQL;UID=P21DC2;Trusted_Connection=Yes;APP=Microsoft Office 2013; WSID=P21APP"
+  
+  SQL_Query_String = "SELECT DISTINCT inv_mast.item_id, inv_mast.item_desc, inv_loc.inv_max ""max"", inv_loc.inv_min ""min"", inv_loc.qty_on_hand ""on_hand"", MAX(invoice_hdr.invoice_date) OVER (PARTITION BY inv_mast.item_id) ""last_date_sold"", inv_loc.sales_discount_group ""discount_group"", inv_loc.location_id ""loc_id"", discount_group.discount_group_description, (inventory_supplier.cost/inv_mast.purchase_pricing_unit_size) ""cost"", ((inventory_supplier.cost/inv_mast.purchase_pricing_unit_size)*inv_loc.qty_on_hand) ""inv_total"" FROM Prophet21.dbo.p21_view_inv_mast inv_mast INNER JOIN Prophet21.dbo.p21_view_invoice_line AS invoice_line ON invoice_line.inv_mast_uid = inv_mast.inv_mast_uid INNER JOIN  Prophet21.dbo.p21_view_invoice_hdr AS invoice_hdr ON invoice_hdr.invoice_no = invoice_line.invoice_no INNER JOIN Prophet21.dbo.p21_view_inv_loc AS inv_loc ON inv_loc.inv_mast_uid = inv_mast.inv_mast_uid INNER JOIN Prophet21.dbo.p21_view_discount_group " & _
+  "AS discount_group ON discount_group.discount_group_id = inv_loc.sales_discount_group INNER JOIN Prophet21.dbo.p21_view_inventory_supplier AS inventory_supplier ON inventory_supplier.inv_mast_uid = inv_mast.inv_mast_uid INNER JOIN Prophet21.dbo.p21_view_inventory_supplier_x_loc AS supp_x_loc ON supp_x_loc.inventory_supplier_uid = inventory_supplier.inventory_supplier_uid AND supp_x_loc.location_id = inv_loc.location_id WHERE supp_x_loc.primary_supplier = 'Y'  AND inv_mast.item_id NOT IN(SELECT invoice_line.item_id FROM Prophet21.dbo.p21_view_invoice_line invoice_line INNER JOIN Prophet21.dbo.p21_view_invoice_hdr AS invoice_hdr ON invoice_hdr.invoice_no = invoice_line.invoice_no WHERE invoice_hdr.invoice_date >= '" & Begin_Date & "') " & _
+  "AND invoice_hdr.order_date < '" & Begin_Date & "' GROUP BY inv_mast.item_id, inv_mast.item_desc, invoice_hdr.invoice_date, inv_loc.inv_max, inv_loc.inv_min, inv_loc.qty_on_hand, inv_loc.location_id, inv_loc.sales_discount_group, discount_group.discount_group_description, inventory_supplier.cost, inv_mast.purchase_pricing_unit_size HAVING inv_loc.qty_on_hand > 0"
+  
+  cn.CommandTimeout = 0
+  
+  cn.Open ConnString
+  
+  Dim rs As ADODB.Recordset
+  Set rs = New ADODB.Recordset
+    
+  'Begin SQL Query
+  With rs
+    .ActiveConnection = cn
+    .Open SQL_Query_String
+    Unfiltered_Data.Range("A2").CopyFromRecordset rs
+    .Close
+  End With
+  
+  cn.Close
+  Set rs = Nothing
+  Set cn = Nothing
+  
+  'Dynamically Filter Results by Discount Group, Add an Autosum to the end of the results
+  Dim Last_Row As Long
+  Dim rng As Range
+  Last_Row = Unfiltered_Data.Cells(Unfiltered_Data.Rows.Count, "A").End(xlUp).Row
+  Set rng = Unfiltered_Data.Range("A1:K" & Last_Row)
+  
+  Unfiltered_Data.AutoFilterMode = False
+  '100 Location
+  rng.AutoFilter Field:=7, Criteria1:=Array("0", "100", "8888", "8890", "9000", "9999", "DEFAULT", "A-D PROM"), Operator:=xlFilterValues
+  rng.AutoFilter Field:=8, Criteria1:=Array("100"), Operator:=2
+  rng.Offset(1, 0).Resize(rng.Rows.Count - 1).SpecialCells(xlCellTypeVisible).Copy Destination:=Worksheets("100").Range("A2")
+  Last_Row = Worksheets("100").Cells(Rows.Count, "A").End(xlUp).Row + 1
+  Worksheets("100").Cells(Last_Row + 1, "L").Formula = "=SUM($K$2:$K$" & Last_Row - 1 & ")"
+  Unfiltered_Data.AutoFilterMode = False
+  'Don Broach
+  rng.AutoFilter Field:=7, Criteria1:=Array("115", "130", "140", "150", "155", "175"), Operator:=xlFilterValues
+  rng.Offset(1, 0).Resize(rng.Rows.Count - 1).SpecialCells(xlCellTypeVisible).Copy Destination:=Worksheets("Broach").Range("A2")
+  Last_Row = Worksheets("Broach").Cells(Rows.Count, "A").End(xlUp).Row + 1
+  Worksheets("Broach").Cells(Last_Row + 1, "L").Formula = "=SUM($K$2:$K$" & Last_Row - 1 & ")"
+  Unfiltered_Data.AutoFilterMode = False
+  'Scott Stewart
+  rng.AutoFilter Field:=7, Criteria1:=Array("105", "111", "112", "118", "119", "120", "121", "124", "125", "128", "132", "153", "160", "165", "170", "185", "190", "195"), Operator:=xlFilterValues
+  rng.Offset(1, 0).Resize(rng.Rows.Count - 1).SpecialCells(xlCellTypeVisible).Copy Destination:=Worksheets("Stewart").Range("A2")
+  Last_Row = Worksheets("Stewart").Cells(Rows.Count, "A").End(xlUp).Row + 1
+  Worksheets("Stewart").Cells(Last_Row + 1, "L").Formula = "=SUM($K$2:$K$" & Last_Row - 1 & ")"
+  Unfiltered_Data.AutoFilterMode = False
+  'John Dobbs
+  rng.AutoFilter Field:=7, Criteria1:=Array("145"), Operator:=xlFilterValues
+  rng.Offset(1, 0).Resize(rng.Rows.Count - 1).SpecialCells(xlCellTypeVisible).Copy Destination:=Worksheets("Dobbs").Range("A2")
+  Last_Row = Worksheets("Dobbs").Cells(Rows.Count, "A").End(xlUp).Row + 1
+  Worksheets("Dobbs").Cells(Last_Row + 1, "L").Formula = "=SUM($K$2:$K$" & Last_Row - 1 & ")"
+  Unfiltered_Data.AutoFilterMode = False
+  'Chris Menard
+  rng.AutoFilter Field:=7, Criteria1:=Array("108", "113", "149", "157"), Operator:=xlFilterValues
+  rng.Offset(1, 0).Resize(rng.Rows.Count - 1).SpecialCells(xlCellTypeVisible).Copy Destination:=Worksheets("Menard").Range("A2")
+  Last_Row = Worksheets("Menard").Cells(Rows.Count, "A").End(xlUp).Row + 1
+  Worksheets("Menard").Cells(Last_Row + 1, "L").Formula = "=SUM($K$2:$K$" & Last_Row - 1 & ")"
+  Unfiltered_Data.AutoFilterMode = False
+  '200 Location
+  rng.AutoFilter Field:=7, Criteria1:=Array("0", "200", "203", "203A", "203B", "203C", "203D", "203M", "204", "209", "260", "DEFAULT", "9999", "A-D PROM"), Operator:=xlFilterValues
+  rng.AutoFilter Field:=8, Criteria1:=Array("200"), Operator:=2
+  rng.Offset(1, 0).Resize(rng.Rows.Count - 1).SpecialCells(xlCellTypeVisible).Copy Destination:=Worksheets("200").Range("A2")
+  Last_Row = Worksheets("200").Cells(Rows.Count, "A").End(xlUp).Row + 1
+  Worksheets("200").Cells(Last_Row + 1, "L").Formula = "=SUM($K$2:$K$" & Last_Row - 1 & ")"
+  Unfiltered_Data.AutoFilterMode = False
+  'Little Rock House
+  rng.AutoFilter Field:=7, Criteria1:=Array("162", "207", "208", "215", "216", "217", "230", "270", "275", "295", "297"), Operator:=xlFilterValues
+  rng.Offset(1, 0).Resize(rng.Rows.Count - 1).SpecialCells(xlCellTypeVisible).Copy Destination:=Worksheets("LittleRockHouse").Range("A2")
+  Last_Row = Worksheets("LittleRockHouse").Cells(Rows.Count, "A").End(xlUp).Row + 1
+  Worksheets("LittleRockHouse").Cells(Last_Row + 1, "L").Formula = "=SUM($K$2:$K$" & Last_Row - 1 & ")"
+  Unfiltered_Data.AutoFilterMode = False
+  'Randy Workman
+  rng.AutoFilter Field:=7, Criteria1:=Array("220"), Operator:=xlFilterValues
+  rng.Offset(1, 0).Resize(rng.Rows.Count - 1).SpecialCells(xlCellTypeVisible).Copy Destination:=Worksheets("Workman").Range("A2")
+  Last_Row = Worksheets("Workman").Cells(Rows.Count, "A").End(xlUp).Row + 1
+  Worksheets("Workman").Cells(Last_Row + 1, "L").Formula = "=SUM($K$2:$K$" & Last_Row - 1 & ")"
+  Unfiltered_Data.AutoFilterMode = False
+  'Parcher
+  rng.AutoFilter Field:=7, Criteria1:=Array("250"), Operator:=xlFilterValues
+  rng.Offset(1, 0).Resize(rng.Rows.Count - 1).SpecialCells(xlCellTypeVisible).Copy Destination:=Worksheets("Parcher").Range("A2")
+  Last_Row = Worksheets("Parcher").Cells(Rows.Count, "A").End(xlUp).Row + 1
+  Worksheets("Parcher").Cells(Last_Row + 1, "L").Formula = "=SUM($K$2:$K$" & Last_Row - 1 & ")"
+  Unfiltered_Data.AutoFilterMode = False
+  'Fortner
+  rng.AutoFilter Field:=7, Criteria1:=Array("180", "286"), Operator:=xlFilterValues
+  rng.Offset(1, 0).Resize(rng.Rows.Count - 1).SpecialCells(xlCellTypeVisible).Copy Destination:=Worksheets("Fortner").Range("A2")
+  Last_Row = Worksheets("Fortner").Cells(Rows.Count, "A").End(xlUp).Row + 1
+  Worksheets("Fortner").Cells(Last_Row + 1, "L").Formula = "=SUM($K$2:$K$" & Last_Row - 1 & ")"
+  Unfiltered_Data.AutoFilterMode = False
+  'Rhine Brown
+  rng.AutoFilter Field:=7, Criteria1:=Array("177", "196", "206", "290", "537"), Operator:=xlFilterValues
+  rng.Offset(1, 0).Resize(rng.Rows.Count - 1).SpecialCells(xlCellTypeVisible).Copy Destination:=Worksheets("Brown").Range("A2")
+  Last_Row = Worksheets("Brown").Cells(Rows.Count, "A").End(xlUp).Row + 1
+  Worksheets("Brown").Cells(Last_Row + 1, "L").Formula = "=SUM($K$2:$K$" & Last_Row - 1 & ")"
+  Unfiltered_Data.AutoFilterMode = False
+  'OC Howser
+  rng.AutoFilter Field:=7, Criteria1:=Array("180", "286", "288"), Operator:=xlFilterValues
+  rng.Offset(1, 0).Resize(rng.Rows.Count - 1).SpecialCells(xlCellTypeVisible).Copy Destination:=Worksheets("Howser").Range("A2")
+  Last_Row = Worksheets("Howser").Cells(Rows.Count, "A").End(xlUp).Row + 1
+  Worksheets("Howser").Cells(Last_Row + 1, "L").Formula = "=SUM($K$2:$K$" & Last_Row - 1 & ")"
+  Unfiltered_Data.AutoFilterMode = False
+  'Eddie Connor
+  rng.AutoFilter Field:=7, Criteria1:=Array("202", "240", "335", "340"), Operator:=xlFilterValues
+  rng.Offset(1, 0).Resize(rng.Rows.Count - 1).SpecialCells(xlCellTypeVisible).Copy Destination:=Worksheets("Connor").Range("A2")
+  Last_Row = Worksheets("Connor").Cells(Rows.Count, "A").End(xlUp).Row + 1
+  Worksheets("Connor").Cells(Last_Row + 1, "L").Formula = "=SUM($K$2:$K$" & Last_Row - 1 & ")"
+  Unfiltered_Data.AutoFilterMode = False
+  'Darby Hanson
+  rng.AutoFilter Field:=7, Criteria1:=Array("272"), Operator:=xlFilterValues
+  rng.Offset(1, 0).Resize(rng.Rows.Count - 1).SpecialCells(xlCellTypeVisible).Copy Destination:=Worksheets("Hanson").Range("A2")
+  Last_Row = Worksheets("Hanson").Cells(Rows.Count, "A").End(xlUp).Row + 1
+  Worksheets("Hanson").Cells(Last_Row + 1, "L").Formula = "=SUM($K$2:$K$" & Last_Row - 1 & ")"
+  Unfiltered_Data.AutoFilterMode = False
+  'Chris Vailes
+  rng.AutoFilter Field:=7, Criteria1:=Array("225", "233", "235", "255", "261", "280", "285", "296", "298", "541"), Operator:=xlFilterValues
+  rng.Offset(1, 0).Resize(rng.Rows.Count - 1).SpecialCells(xlCellTypeVisible).Copy Destination:=Worksheets("Vailes").Range("A2")
+  Last_Row = Worksheets("Vailes").Cells(Rows.Count, "A").End(xlUp).Row + 1
+  Worksheets("Vailes").Cells(Last_Row + 1, "L").Formula = "=SUM($K$2:$K$" & Last_Row - 1 & ")"
+  Unfiltered_Data.AutoFilterMode = False
+  '300 Location
+  rng.AutoFilter Field:=7, Criteria1:=Array("0", "300", "310", "8888", "8890", "9000", "9999", "DEFAULT", "A-D PROM"), Operator:=xlFilterValues
+  rng.AutoFilter Field:=8, Criteria1:=Array("300"), Operator:=2
+  rng.Offset(1, 0).Resize(rng.Rows.Count - 1).SpecialCells(xlCellTypeVisible).Copy Destination:=Worksheets("300").Range("A2")
+  Last_Row = Worksheets("300").Cells(Rows.Count, "A").End(xlUp).Row + 1
+  Worksheets("300").Cells(Last_Row + 1, "L").Formula = "=SUM($K$2:$K$" & Last_Row - 1 & ")"
+  Unfiltered_Data.AutoFilterMode = False
+  'Mike Sprague
+  rng.AutoFilter Field:=7, Criteria1:=Array("320"), Operator:=xlFilterValues
+  rng.Offset(1, 0).Resize(rng.Rows.Count - 1).SpecialCells(xlCellTypeVisible).Copy Destination:=Worksheets("Sprague").Range("A2")
+  Last_Row = Worksheets("Sprague").Cells(Rows.Count, "A").End(xlUp).Row + 1
+  Worksheets("Sprague").Cells(Last_Row + 1, "L").Formula = "=SUM($K$2:$K$" & Last_Row - 1 & ")"
+  Unfiltered_Data.AutoFilterMode = False
+  'Bill Word - Robbie Allwhite
+  rng.AutoFilter Field:=7, Criteria1:=Array("315"), Operator:=xlFilterValues
+  rng.Offset(1, 0).Resize(rng.Rows.Count - 1).SpecialCells(xlCellTypeVisible).Copy Destination:=Worksheets("Word-Allwhite").Range("A2")
+  Last_Row = Worksheets("Word-Allwhite").Cells(Rows.Count, "A").End(xlUp).Row + 1
+  Worksheets("Word-Allwhite").Cells(Last_Row + 1, "L").Formula = "=SUM($K$2:$K$" & Last_Row - 1 & ")"
+  Unfiltered_Data.AutoFilterMode = False
+  'Mike Richmond
+  rng.AutoFilter Field:=7, Criteria1:=Array("312", "318", "323", "324", "325", "327", "330", "332", "343", "345", "350", "352", "355", "360", "365", "368", "370", "375", "380", "381", "382", "383", "385", "386", "388", "390", "395"), Operator:=xlFilterValues
+  rng.Offset(1, 0).Resize(rng.Rows.Count - 1).SpecialCells(xlCellTypeVisible).Copy Destination:=Worksheets("Richmond").Range("A2")
+  Last_Row = Worksheets("Richmond").Cells(Rows.Count, "A").End(xlUp).Row + 1
+  Worksheets("Richmond").Cells(Last_Row + 1, "L").Formula = "=SUM($K$2:$K$" & Last_Row - 1 & ")"
+  Unfiltered_Data.AutoFilterMode = False
+  '400 Location
+  rng.AutoFilter Field:=7, Criteria1:=Array("0", "400", "8888", "8890", "9000", "9999", "DEFAULT", "A-D PROM"), Operator:=xlFilterValues
+  rng.AutoFilter Field:=8, Criteria1:=Array("400"), Operator:=2
+  rng.Offset(1, 0).Resize(rng.Rows.Count - 1).SpecialCells(xlCellTypeVisible).Copy Destination:=Worksheets("400").Range("A2")
+  Last_Row = Worksheets("400").Cells(Rows.Count, "A").End(xlUp).Row + 1
+  Worksheets("400").Cells(Last_Row + 1, "L").Formula = "=SUM($K$2:$K$" & Last_Row - 1 & ")"
+  Unfiltered_Data.AutoFilterMode = False
+  'Taylor Nash
+  rng.AutoFilter Field:=7, Criteria1:=Array("396", "419", "420", "425", "427", "430", "435", "445", "450", "455", "460", "465", "470", "475", "480"), Operator:=xlFilterValues
+  rng.Offset(1, 0).Resize(rng.Rows.Count - 1).SpecialCells(xlCellTypeVisible).Copy Destination:=Worksheets("Nash").Range("A2")
+  Last_Row = Worksheets("Nash").Cells(Rows.Count, "A").End(xlUp).Row + 1
+  Worksheets("Nash").Cells(Last_Row + 1, "L").Formula = "=SUM($K$2:$K$" & Last_Row - 1 & ")"
+  Unfiltered_Data.AutoFilterMode = False
+  'Victoria Carney
+  rng.AutoFilter Field:=7, Criteria1:=Array("410", "415", "442", "440", "485"), Operator:=xlFilterValues
+  rng.Offset(1, 0).Resize(rng.Rows.Count - 1).SpecialCells(xlCellTypeVisible).Copy Destination:=Worksheets("Carney").Range("A2")
+  Last_Row = Worksheets("Carney").Cells(Rows.Count, "A").End(xlUp).Row + 1
+  Worksheets("Carney").Cells(Last_Row + 1, "L").Formula = "=SUM($K$2:$K$" & Last_Row - 1 & ")"
+  Unfiltered_Data.AutoFilterMode = False
+  '500 Location
+  rng.AutoFilter Field:=7, Criteria1:=Array("0", "500", "8888", "8890", "9000", "9999", "DEFAULT", "A-D PROM"), Operator:=xlFilterValues
+  rng.AutoFilter Field:=8, Criteria1:=Array("500"), Operator:=2
+  rng.Offset(1, 0).Resize(rng.Rows.Count - 1).SpecialCells(xlCellTypeVisible).Copy Destination:=Worksheets("500").Range("A2")
+  Last_Row = Worksheets("500").Cells(Rows.Count, "A").End(xlUp).Row + 1
+  Worksheets("500").Cells(Last_Row + 1, "L").Formula = "=SUM($K$2:$K$" & Last_Row - 1 & ")"
+  Unfiltered_Data.AutoFilterMode = False
+  'Braden Fyffe
+  rng.AutoFilter Field:=7, Criteria1:=Array("505", "510", "511", "513", "515", "517", "519", "520", "522", "525", "530", "535", "545", "550", "555", "560", "565", "570", "575", "580", "585", "589", "590", "595"), Operator:=xlFilterValues
+  rng.Offset(1, 0).Resize(rng.Rows.Count - 1).SpecialCells(xlCellTypeVisible).Copy Destination:=Worksheets("Fyffe").Range("A2")
+  Last_Row = Worksheets("Fyffe").Cells(Rows.Count, "A").End(xlUp).Row + 1
+  Worksheets("Fyffe").Cells(Last_Row + 1, "L").Formula = "=SUM($K$2:$K$" & Last_Row - 1 & ")"
+  Unfiltered_Data.AutoFilterMode = False
+  'Domtar
+  rng.AutoFilter Field:=7, Criteria1:=Array("0", "510", "8888", "8890", "9000", "9999", "DEFAULT", "A-D PROM"), Operator:=xlFilterValues
+  rng.AutoFilter Field:=8, Criteria1:=Array("501"), Operator:=2
+  rng.Offset(1, 0).Resize(rng.Rows.Count - 1).SpecialCells(xlCellTypeVisible).Copy Destination:=Worksheets("Domtar").Range("A2")
+  Last_Row = Worksheets("Domtar").Cells(Rows.Count, "A").End(xlUp).Row + 1
+  Worksheets("Domtar").Cells(Last_Row + 1, "L").Formula = "=SUM($K$2:$K$" & Last_Row - 1 & ")"
+  Unfiltered_Data.AutoFilterMode = False
+  
+  'Sort all worksheets by total cost
+  ActiveWorkbook.Worksheets("UnfilteredData").Sort.SortFields.Clear
+    ActiveWorkbook.Worksheets("UnfilteredData").Sort.SortFields.Add Key:=Range( _
+        "K1"), SortOn:=xlSortOnValues, Order:=xlDescending, DataOption:= _
+        xlSortNormal
+    With ActiveWorkbook.Worksheets("UnfilteredData").Sort
+        .SetRange Range("A3:K6324")
+        .Header = xlNo
+        .MatchCase = False
+        .Orientation = xlTopToBottom
+        .SortMethod = xlPinYin
+        .Apply
+    End With
+    
+  ActiveWorkbook.Worksheets("100").Sort.SortFields.Clear
+    ActiveWorkbook.Worksheets("100").Sort.SortFields.Add Key:=Range( _
+        "K1"), SortOn:=xlSortOnValues, Order:=xlDescending, DataOption:= _
+        xlSortNormal
+    With ActiveWorkbook.Worksheets("100").Sort
+        .SetRange Range("A3:K6324")
+        .Header = xlNo
+        .MatchCase = False
+        .Orientation = xlTopToBottom
+        .SortMethod = xlPinYin
+        .Apply
+    End With
+    
+  ActiveWorkbook.Worksheets("Broach").Sort.SortFields.Clear
+    ActiveWorkbook.Worksheets("Broach").Sort.SortFields.Add Key:=Range( _
+        "K1"), SortOn:=xlSortOnValues, Order:=xlDescending, DataOption:= _
+        xlSortNormal
+    With ActiveWorkbook.Worksheets("Broach").Sort
+        .SetRange Range("A3:K6324")
+        .Header = xlNo
+        .MatchCase = False
+        .Orientation = xlTopToBottom
+        .SortMethod = xlPinYin
+        .Apply
+    End With
+    
+  ActiveWorkbook.Worksheets("Stewart").Sort.SortFields.Clear
+    ActiveWorkbook.Worksheets("Stewart").Sort.SortFields.Add Key:=Range( _
+        "K1"), SortOn:=xlSortOnValues, Order:=xlDescending, DataOption:= _
+        xlSortNormal
+    With ActiveWorkbook.Worksheets("Stewart").Sort
+        .SetRange Range("A3:K6324")
+        .Header = xlNo
+        .MatchCase = False
+        .Orientation = xlTopToBottom
+        .SortMethod = xlPinYin
+        .Apply
+    End With
+    
+  ActiveWorkbook.Worksheets("Dobbs").Sort.SortFields.Clear
+    ActiveWorkbook.Worksheets("Dobbs").Sort.SortFields.Add Key:=Range( _
+        "K1"), SortOn:=xlSortOnValues, Order:=xlDescending, DataOption:= _
+        xlSortNormal
+    With ActiveWorkbook.Worksheets("Dobbs").Sort
+        .SetRange Range("A3:K6324")
+        .Header = xlNo
+        .MatchCase = False
+        .Orientation = xlTopToBottom
+        .SortMethod = xlPinYin
+        .Apply
+    End With
+  
+  ActiveWorkbook.Worksheets("Menard").Sort.SortFields.Clear
+    ActiveWorkbook.Worksheets("Menard").Sort.SortFields.Add Key:=Range( _
+        "K1"), SortOn:=xlSortOnValues, Order:=xlDescending, DataOption:= _
+        xlSortNormal
+    With ActiveWorkbook.Worksheets("Menard").Sort
+        .SetRange Range("A3:K6324")
+        .Header = xlNo
+        .MatchCase = False
+        .Orientation = xlTopToBottom
+        .SortMethod = xlPinYin
+        .Apply
+    End With
+    
+  ActiveWorkbook.Worksheets("200").Sort.SortFields.Clear
+    ActiveWorkbook.Worksheets("200").Sort.SortFields.Add Key:=Range( _
+        "K1"), SortOn:=xlSortOnValues, Order:=xlDescending, DataOption:= _
+        xlSortNormal
+    With ActiveWorkbook.Worksheets("200").Sort
+        .SetRange Range("A3:K6324")
+        .Header = xlNo
+        .MatchCase = False
+        .Orientation = xlTopToBottom
+        .SortMethod = xlPinYin
+        .Apply
+    End With
+    
+  ActiveWorkbook.Worksheets("LittleRockHouse").Sort.SortFields.Clear
+    ActiveWorkbook.Worksheets("LittleRockHouse").Sort.SortFields.Add Key:=Range( _
+        "K1"), SortOn:=xlSortOnValues, Order:=xlDescending, DataOption:= _
+        xlSortNormal
+    With ActiveWorkbook.Worksheets("LittleRockHouse").Sort
+        .SetRange Range("A3:K6324")
+        .Header = xlNo
+        .MatchCase = False
+        .Orientation = xlTopToBottom
+        .SortMethod = xlPinYin
+        .Apply
+    End With
+    
+  ActiveWorkbook.Worksheets("Workman").Sort.SortFields.Clear
+    ActiveWorkbook.Worksheets("Workman").Sort.SortFields.Add Key:=Range( _
+        "K1"), SortOn:=xlSortOnValues, Order:=xlDescending, DataOption:= _
+        xlSortNormal
+    With ActiveWorkbook.Worksheets("Workman").Sort
+        .SetRange Range("A3:K6324")
+        .Header = xlNo
+        .MatchCase = False
+        .Orientation = xlTopToBottom
+        .SortMethod = xlPinYin
+        .Apply
+    End With
+    
+  ActiveWorkbook.Worksheets("Parcher").Sort.SortFields.Clear
+    ActiveWorkbook.Worksheets("Parcher").Sort.SortFields.Add Key:=Range( _
+        "K1"), SortOn:=xlSortOnValues, Order:=xlDescending, DataOption:= _
+        xlSortNormal
+    With ActiveWorkbook.Worksheets("Parcher").Sort
+        .SetRange Range("A3:K6324")
+        .Header = xlNo
+        .MatchCase = False
+        .Orientation = xlTopToBottom
+        .SortMethod = xlPinYin
+        .Apply
+    End With
+  
+  ActiveWorkbook.Worksheets("Fortner").Sort.SortFields.Clear
+    ActiveWorkbook.Worksheets("Fortner").Sort.SortFields.Add Key:=Range( _
+        "K1"), SortOn:=xlSortOnValues, Order:=xlDescending, DataOption:= _
+        xlSortNormal
+    With ActiveWorkbook.Worksheets("Fortner").Sort
+        .SetRange Range("A3:K6324")
+        .Header = xlNo
+        .MatchCase = False
+        .Orientation = xlTopToBottom
+        .SortMethod = xlPinYin
+        .Apply
+    End With
+    
+  ActiveWorkbook.Worksheets("Brown").Sort.SortFields.Clear
+    ActiveWorkbook.Worksheets("Brown").Sort.SortFields.Add Key:=Range( _
+        "K1"), SortOn:=xlSortOnValues, Order:=xlDescending, DataOption:= _
+        xlSortNormal
+    With ActiveWorkbook.Worksheets("Brown").Sort
+        .SetRange Range("A3:K6324")
+        .Header = xlNo
+        .MatchCase = False
+        .Orientation = xlTopToBottom
+        .SortMethod = xlPinYin
+        .Apply
+    End With
+      
+  ActiveWorkbook.Worksheets("Howser").Sort.SortFields.Clear
+    ActiveWorkbook.Worksheets("Howser").Sort.SortFields.Add Key:=Range( _
+        "K1"), SortOn:=xlSortOnValues, Order:=xlDescending, DataOption:= _
+        xlSortNormal
+    With ActiveWorkbook.Worksheets("Howser").Sort
+        .SetRange Range("A3:K6324")
+        .Header = xlNo
+        .MatchCase = False
+        .Orientation = xlTopToBottom
+        .SortMethod = xlPinYin
+        .Apply
+    End With
+    
+  ActiveWorkbook.Worksheets("Connor").Sort.SortFields.Clear
+    ActiveWorkbook.Worksheets("Connor").Sort.SortFields.Add Key:=Range( _
+        "K1"), SortOn:=xlSortOnValues, Order:=xlDescending, DataOption:= _
+        xlSortNormal
+    With ActiveWorkbook.Worksheets("Connor").Sort
+        .SetRange Range("A3:K6324")
+        .Header = xlNo
+        .MatchCase = False
+        .Orientation = xlTopToBottom
+        .SortMethod = xlPinYin
+        .Apply
+    End With
+     
+  ActiveWorkbook.Worksheets("Hanson").Sort.SortFields.Clear
+    ActiveWorkbook.Worksheets("Hanson").Sort.SortFields.Add Key:=Range( _
+        "K1"), SortOn:=xlSortOnValues, Order:=xlDescending, DataOption:= _
+        xlSortNormal
+    With ActiveWorkbook.Worksheets("Hanson").Sort
+        .SetRange Range("A3:K6324")
+        .Header = xlNo
+        .MatchCase = False
+        .Orientation = xlTopToBottom
+        .SortMethod = xlPinYin
+        .Apply
+    End With
+      
+  ActiveWorkbook.Worksheets("Vailes").Sort.SortFields.Clear
+    ActiveWorkbook.Worksheets("Vailes").Sort.SortFields.Add Key:=Range( _
+        "K1"), SortOn:=xlSortOnValues, Order:=xlDescending, DataOption:= _
+        xlSortNormal
+    With ActiveWorkbook.Worksheets("Vailes").Sort
+        .SetRange Range("A3:K6324")
+        .Header = xlNo
+        .MatchCase = False
+        .Orientation = xlTopToBottom
+        .SortMethod = xlPinYin
+        .Apply
+    End With
+    
+  ActiveWorkbook.Worksheets("300").Sort.SortFields.Clear
+    ActiveWorkbook.Worksheets("300").Sort.SortFields.Add Key:=Range( _
+        "K1"), SortOn:=xlSortOnValues, Order:=xlDescending, DataOption:= _
+        xlSortNormal
+    With ActiveWorkbook.Worksheets("300").Sort
+        .SetRange Range("A3:K6324")
+        .Header = xlNo
+        .MatchCase = False
+        .Orientation = xlTopToBottom
+        .SortMethod = xlPinYin
+        .Apply
+    End With
+  
+  ActiveWorkbook.Worksheets("Sprague").Sort.SortFields.Clear
+    ActiveWorkbook.Worksheets("Sprague").Sort.SortFields.Add Key:=Range( _
+        "K1"), SortOn:=xlSortOnValues, Order:=xlDescending, DataOption:= _
+        xlSortNormal
+    With ActiveWorkbook.Worksheets("Sprague").Sort
+        .SetRange Range("A3:K6324")
+        .Header = xlNo
+        .MatchCase = False
+        .Orientation = xlTopToBottom
+        .SortMethod = xlPinYin
+        .Apply
+    End With
+  
+  ActiveWorkbook.Worksheets("Word-Allwhite").Sort.SortFields.Clear
+    ActiveWorkbook.Worksheets("Word-Allwhite").Sort.SortFields.Add Key:=Range( _
+        "K1"), SortOn:=xlSortOnValues, Order:=xlDescending, DataOption:= _
+        xlSortNormal
+    With ActiveWorkbook.Worksheets("Word-Allwhite").Sort
+        .SetRange Range("A3:K6324")
+        .Header = xlNo
+        .MatchCase = False
+        .Orientation = xlTopToBottom
+        .SortMethod = xlPinYin
+        .Apply
+    End With
+    
+  ActiveWorkbook.Worksheets("Richmond").Sort.SortFields.Clear
+    ActiveWorkbook.Worksheets("Richmond").Sort.SortFields.Add Key:=Range( _
+        "K1"), SortOn:=xlSortOnValues, Order:=xlDescending, DataOption:= _
+        xlSortNormal
+    With ActiveWorkbook.Worksheets("Richmond").Sort
+        .SetRange Range("A3:K6324")
+        .Header = xlNo
+        .MatchCase = False
+        .Orientation = xlTopToBottom
+        .SortMethod = xlPinYin
+        .Apply
+    End With
+    
+  ActiveWorkbook.Worksheets("400").Sort.SortFields.Clear
+    ActiveWorkbook.Worksheets("400").Sort.SortFields.Add Key:=Range( _
+        "K1"), SortOn:=xlSortOnValues, Order:=xlDescending, DataOption:= _
+        xlSortNormal
+    With ActiveWorkbook.Worksheets("400").Sort
+        .SetRange Range("A3:K6324")
+        .Header = xlNo
+        .MatchCase = False
+        .Orientation = xlTopToBottom
+        .SortMethod = xlPinYin
+        .Apply
+    End With
+    
+  ActiveWorkbook.Worksheets("Nash").Sort.SortFields.Clear
+    ActiveWorkbook.Worksheets("Nash").Sort.SortFields.Add Key:=Range( _
+        "K1"), SortOn:=xlSortOnValues, Order:=xlDescending, DataOption:= _
+        xlSortNormal
+    With ActiveWorkbook.Worksheets("Nash").Sort
+        .SetRange Range("A3:K6324")
+        .Header = xlNo
+        .MatchCase = False
+        .Orientation = xlTopToBottom
+        .SortMethod = xlPinYin
+        .Apply
+    End With
+  
+  ActiveWorkbook.Worksheets("Carney").Sort.SortFields.Clear
+    ActiveWorkbook.Worksheets("Carney").Sort.SortFields.Add Key:=Range( _
+        "K1"), SortOn:=xlSortOnValues, Order:=xlDescending, DataOption:= _
+        xlSortNormal
+    With ActiveWorkbook.Worksheets("Carney").Sort
+        .SetRange Range("A3:K6324")
+        .Header = xlNo
+        .MatchCase = False
+        .Orientation = xlTopToBottom
+        .SortMethod = xlPinYin
+        .Apply
+    End With
+    
+  ActiveWorkbook.Worksheets("500").Sort.SortFields.Clear
+    ActiveWorkbook.Worksheets("500").Sort.SortFields.Add Key:=Range( _
+        "K1"), SortOn:=xlSortOnValues, Order:=xlDescending, DataOption:= _
+        xlSortNormal
+    With ActiveWorkbook.Worksheets("500").Sort
+        .SetRange Range("A3:K6324")
+        .Header = xlNo
+        .MatchCase = False
+        .Orientation = xlTopToBottom
+        .SortMethod = xlPinYin
+        .Apply
+    End With
+    
+  ActiveWorkbook.Worksheets("Fyffe").Sort.SortFields.Clear
+    ActiveWorkbook.Worksheets("Fyffe").Sort.SortFields.Add Key:=Range( _
+        "K1"), SortOn:=xlSortOnValues, Order:=xlDescending, DataOption:= _
+        xlSortNormal
+    With ActiveWorkbook.Worksheets("Fyffe").Sort
+        .SetRange Range("A3:K6324")
+        .Header = xlNo
+        .MatchCase = False
+        .Orientation = xlTopToBottom
+        .SortMethod = xlPinYin
+        .Apply
+    End With
+    
+  ActiveWorkbook.Worksheets("Domtar").Sort.SortFields.Clear
+    ActiveWorkbook.Worksheets("Domtar").Sort.SortFields.Add Key:=Range( _
+        "K1"), SortOn:=xlSortOnValues, Order:=xlDescending, DataOption:= _
+        xlSortNormal
+    With ActiveWorkbook.Worksheets("Domtar").Sort
+        .SetRange Range("A3:K6324")
+        .Header = xlNo
+        .MatchCase = False
+        .Orientation = xlTopToBottom
+        .SortMethod = xlPinYin
+        .Apply
+    End With
+  
+  'Display Results on Main Page
+  Dim temp As Double
+  
+  Last_Row = Worksheets("100").Cells(Rows.Count, "K").End(xlUp).Row
+  temp = Worksheets("100").Cells(Last_Row + 2, "L").Value
+  Worksheets("Main").Cells(7, 2).Value = temp
+  
+  Last_Row = Worksheets("Broach").Cells(Rows.Count, "K").End(xlUp).Row
+  temp = Worksheets("Broach").Cells(Last_Row + 2, "L").Value
+  Worksheets("Main").Cells(8, 2).Value = temp
+  
+  Last_Row = Worksheets("Stewart").Cells(Rows.Count, "K").End(xlUp).Row
+  temp = Worksheets("Stewart").Cells(Last_Row + 2, "L").Value
+  Worksheets("Main").Cells(9, 2).Value = temp
+  
+  Last_Row = Worksheets("Dobbs").Cells(Rows.Count, "K").End(xlUp).Row
+  temp = Worksheets("Dobbs").Cells(Last_Row + 2, "L").Value
+  Worksheets("Main").Cells(10, 2).Value = temp
+  
+  Last_Row = Worksheets("Menard").Cells(Rows.Count, "K").End(xlUp).Row
+  temp = Worksheets("Menard").Cells(Last_Row + 2, "L").Value
+  Worksheets("Main").Cells(11, 2).Value = temp
+  
+  Last_Row = Worksheets("200").Cells(Rows.Count, "K").End(xlUp).Row
+  temp = Worksheets("200").Cells(Last_Row + 2, "L").Value
+  Worksheets("Main").Cells(12, 2).Value = temp
+  
+  Last_Row = Worksheets("LittleRockHouse").Cells(Rows.Count, "K").End(xlUp).Row
+  temp = Worksheets("LittleRockHouse").Cells(Last_Row + 2, "L").Value
+  Worksheets("Main").Cells(13, 2).Value = temp
+  
+  Last_Row = Worksheets("Workman").Cells(Rows.Count, "K").End(xlUp).Row
+  temp = Worksheets("Workman").Cells(Last_Row + 2, "L").Value
+  Worksheets("Main").Cells(14, 2).Value = temp
+  
+  Last_Row = Worksheets("Parcher").Cells(Rows.Count, "K").End(xlUp).Row
+  temp = Worksheets("Parcher").Cells(Last_Row + 2, "L").Value
+  Worksheets("Main").Cells(15, 2).Value = temp
+  
+  Last_Row = Worksheets("Fortner").Cells(Rows.Count, "K").End(xlUp).Row
+  temp = Worksheets("Fortner").Cells(Last_Row + 2, "L").Value
+  Worksheets("Main").Cells(16, 2).Value = temp
+  
+  Last_Row = Worksheets("Brown").Cells(Rows.Count, "K").End(xlUp).Row
+  temp = Worksheets("Brown").Cells(Last_Row + 2, "L").Value
+  Worksheets("Main").Cells(17, 2).Value = temp
+  
+  Last_Row = Worksheets("Howser").Cells(Rows.Count, "K").End(xlUp).Row
+  temp = Worksheets("Howser").Cells(Last_Row + 2, "L").Value
+  Worksheets("Main").Cells(18, 2).Value = temp
+  
+  Last_Row = Worksheets("Connor").Cells(Rows.Count, "K").End(xlUp).Row
+  temp = Worksheets("Connor").Cells(Last_Row + 2, "L").Value
+  Worksheets("Main").Cells(19, 2).Value = temp
+  
+  Last_Row = Worksheets("Hanson").Cells(Rows.Count, "K").End(xlUp).Row
+  temp = Worksheets("Hanson").Cells(Last_Row + 2, "L").Value
+  Worksheets("Main").Cells(20, 2).Value = temp
+  
+  Last_Row = Worksheets("Vailes").Cells(Rows.Count, "K").End(xlUp).Row
+  temp = Worksheets("Vailes").Cells(Last_Row + 2, "L").Value
+  Worksheets("Main").Cells(21, 2).Value = temp
+  
+  Last_Row = Worksheets("300").Cells(Rows.Count, "K").End(xlUp).Row
+  temp = Worksheets("300").Cells(Last_Row + 2, "L").Value
+  Worksheets("Main").Cells(22, 2).Value = temp
+  
+  Last_Row = Worksheets("Sprague").Cells(Rows.Count, "K").End(xlUp).Row
+  temp = Worksheets("Sprague").Cells(Last_Row + 2, "L").Value
+  Worksheets("Main").Cells(23, 2).Value = temp
+  
+  Last_Row = Worksheets("Word-Allwhite").Cells(Rows.Count, "K").End(xlUp).Row
+  temp = Worksheets("Word-Allwhite").Cells(Last_Row + 2, "L").Value
+  Worksheets("Main").Cells(24, 2).Value = temp
+  
+  Last_Row = Worksheets("Richmond").Cells(Rows.Count, "K").End(xlUp).Row
+  temp = Worksheets("Richmond").Cells(Last_Row + 2, "L").Value
+  Worksheets("Main").Cells(25, 2).Value = temp
+  
+  Last_Row = Worksheets("400").Cells(Rows.Count, "K").End(xlUp).Row
+  temp = Worksheets("400").Cells(Last_Row + 2, "L").Value
+  Worksheets("Main").Cells(26, 2).Value = temp
+  
+  Last_Row = Worksheets("Nash").Cells(Rows.Count, "K").End(xlUp).Row
+  temp = Worksheets("Nash").Cells(Last_Row + 2, "L").Value
+  Worksheets("Main").Cells(27, 2).Value = temp
+  
+  Last_Row = Worksheets("Carney").Cells(Rows.Count, "K").End(xlUp).Row
+  temp = Worksheets("Carney").Cells(Last_Row + 2, "L").Value
+  Worksheets("Main").Cells(28, 2).Value = temp
+  
+  Last_Row = Worksheets("500").Cells(Rows.Count, "K").End(xlUp).Row
+  temp = Worksheets("500").Cells(Last_Row + 2, "L").Value
+  Worksheets("Main").Cells(29, 2).Value = temp
+  
+  Last_Row = Worksheets("Fyffe").Cells(Rows.Count, "K").End(xlUp).Row
+  temp = Worksheets("Fyffe").Cells(Last_Row + 2, "L").Value
+  Worksheets("Main").Cells(30, 2).Value = temp
+  
+  Last_Row = Worksheets("Domtar").Cells(Rows.Count, "K").End(xlUp).Row
+  temp = Worksheets("Domtar").Cells(Last_Row + 2, "L").Value
+  Worksheets("Main").Cells(31, 2).Value = temp
+  
+  Worksheets("Main").Cells(32, 2).Formula = "=SUM(B7:B31)"
+  
+  'Enable Application Updating
+  Application.ScreenUpdating = True
+  
+  MsgBox ("Report Compilation Complete.")
+
+End Sub
